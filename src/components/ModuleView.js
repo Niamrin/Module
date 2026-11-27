@@ -1,18 +1,14 @@
+import { QuizView } from './QuizView.js';
 import { computed, ref, watch } from 'vue';
-import { inline, rich, safeMedia, embed, questionErrors, correct } from '../model.js';
+import { inline, rich, safeMedia, embed } from '../model.js';
 export const MediaImage = {props:['src','alt'],setup:()=>({safeMedia}),template:`<img v-if="safeMedia(src)" class="media" :src="safeMedia(src)" :alt="alt||''" loading="lazy"><div v-else class="placeholder">Добавьте изображение в настройках модуля</div>`};
-export const ModuleView = {components:{MediaImage},props:{block:Object,interactive:Boolean},emits:['result'],setup(props,{emit}){
- const d=computed(()=>props.block.data), index=ref(0), point=ref(null), answers=ref([]), checked=ref(false);
+export const ModuleView = {components:{MediaImage,QuizView},props:{block:Object,interactive:Boolean,student:Boolean},setup(props){
+ const d=computed(()=>props.block.data), index=ref(0), point=ref(null);
  const slide=computed(()=>d.value.slides?.[Math.min(index.value,Math.max(0,d.value.slides.length-1))]);
  const tabIndex=computed(()=>Math.min(index.value,Math.max(0,(d.value.tabs?.length||1)-1)));
  const activePoint=computed(()=>d.value.points?.find(p=>p.id===point.value));
- const errors=computed(()=>['single','multiple'].includes(props.block.type)?questionErrors(props.block):[]);
- const valid=computed(()=>correct(props.block,{answers:answers.value}));
- function reset(){answers.value=[];checked.value=false;emit('result',null)}
- watch(()=>props.block.data,()=>{reset();index.value=0;point.value=null},{deep:true});
- function check(){if(!answers.value.length||errors.value.length)return;checked.value=true;emit('result',valid.value)}
- function changeAnswer(id,on){answers.value=props.block.type==='single'?[id]:on?[...new Set([...answers.value,id])]:answers.value.filter(x=>x!==id);checked.value=false;emit('result',null)}
- return {d,index,point,answers,checked,slide,tabIndex,activePoint,errors,valid,check,reset,changeAnswer,inline,rich,safeMedia,embed};
+ watch(()=>props.block.data,()=>{index.value=0;point.value=null},{deep:true});
+ return {d,index,point,slide,tabIndex,activePoint,inline,rich,safeMedia,embed};
 },template:`
 <div v-if="block.type==='text'" v-html="rich(d.body)"></div>
 <figure v-else-if="block.type==='image'"><div class="media-wrap" :style="{width:d.width+'%',margin:'auto'}"><MediaImage :src="d.src" :alt="d.alt"/></div><div v-if="d.caption" class="caption">{{d.caption}}</div></figure>
@@ -24,5 +20,5 @@ export const ModuleView = {components:{MediaImage},props:{block:Object,interacti
 <div v-else-if="block.type==='tabs'"><template v-if="d.tabs.length"><div class="tabs" role="tablist"><button v-for="(t,i) in d.tabs" :key="i" role="tab" :aria-selected="tabIndex===i" :class="{active:tabIndex===i}" @click="index=i">{{t.title||'Вкладка '+(i+1)}}</button></div><div role="tabpanel" v-html="rich(d.tabs[tabIndex].body)"></div></template><div v-else class="placeholder">Добавьте вкладки</div></div>
 <figure v-else-if="block.type==='video'"><div v-if="!safeMedia(d.src,'video')" class="placeholder">Видео пока не добавлено</div><div v-else-if="!interactive" class="placeholder">Видео — откройте предпросмотр</div><iframe v-else-if="embed(d.src)" class="video" :src="embed(d.src)" title="Учебное видео" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><video v-else class="video" controls preload="metadata" :src="safeMedia(d.src,'video')"></video><div v-if="d.caption" class="caption">{{d.caption}}</div></figure>
 <details v-else-if="block.type==='spoiler'" class="spoiler" :open="d.open"><summary>{{d.title||'Примечание'}}</summary><div v-html="rich(d.body)"></div></details>
-<section v-else-if="['single','multiple'].includes(block.type)" class="question"><div class="question-tag">{{block.type==='single'?'Выберите один ответ':'Выберите все правильные ответы'}}</div><h3>{{d.question}}</h3><label v-for="o in d.options" :key="o.id" class="option"><input :type="block.type==='single'?'radio':'checkbox'" :name="'q-'+block.id" :value="o.id" :checked="answers.includes(o.id)" @change="changeAnswer(o.id,$event.target.checked)"><span>{{o.text}}</span></label><div class="qactions"><button class="primary" :disabled="!answers.length||errors.length>0" @click="check">Проверить ответ</button><button v-if="checked" @click="reset">Повторить</button></div><div v-if="errors.length" class="feedback neutral">{{errors.join(' ')}}</div><div v-else-if="checked" class="feedback" :class="valid?'good':'bad'" role="status">{{valid?'Верно!':'Ответ неверный.'}} {{valid?d.explanation:''}}</div></section>
+<QuizView v-else-if="block.type==='quiz'" :block="block" :interactive="interactive" :student="student"/>
 `};
