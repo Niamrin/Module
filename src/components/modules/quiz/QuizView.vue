@@ -1,12 +1,16 @@
 <script>
 import { computed, ref, watch, onBeforeUnmount } from "vue";
-import { questionErrors, correct } from "../model.js";
+import { questionErrors, correct } from "../../../model.js";
 export default {
-  props: { block: Object, interactive: Boolean, student: Boolean },
+  props: {
+    data: Object,
+    blockId: String,
+    interactive: Boolean,
+    student: Boolean,
+  },
   setup(props) {
-    const quiz = computed(() => props.block.data);
-    const storageKey =
-      "course-quiz:" + location.pathname + ":" + props.block.id;
+    const quiz = computed(() => props.data);
+    const storageKey = "course-quiz:" + location.pathname + ":" + props.blockId;
     const attempt = ref({
       number: 0,
       phase: "ready",
@@ -166,7 +170,7 @@ export default {
           <label v-for="(o, i) in q.data.options" :key="o.id" class="option"
             ><input
               :type="q.type === 'single' ? 'radio' : 'checkbox'"
-              :name="block.id + '-' + n"
+              :name="blockId + '-' + n"
               :checked="attempt.answers[n]?.includes(i)"
               @change="answer(n, i, $event.target.checked)"
             />{{ o.text }}</label
