@@ -8,14 +8,15 @@ import {
   questionErrors,
   exportFile,
 } from "./model.js";
-import ModuleView from "./components/ModuleView.vue";
+import CourseLesson from "./components/CourseLesson.vue";
+import { renderStudentPage } from "./export-student.js";
 import ModuleSettings from "./components/ModuleSettings.vue";
 import BlockCanvas from "./components/BlockCanvas.vue";
 import { walkBlocks, childLists, visibleTree } from "./block-tree.js";
 import { useCourseHistory } from "./course-history.js";
 import Field from "./components/Field.vue";
 export default {
-  components: { ModuleSettings, ModuleView, BlockCanvas, Field },
+  components: { ModuleSettings, CourseLesson, BlockCanvas, Field },
   setup() {
     const KEY = "course-builder-vue3-v1",
       seed = JSON.parse(document.getElementById("seed")?.textContent || "null"),
@@ -289,22 +290,7 @@ export default {
         return;
       }
       try {
-        let html = window.__COURSE_SOURCE__;
-        if (!html) {
-          const response = await fetch(
-            new URL("course_builder_vue3.html", document.baseURI),
-          );
-          if (!response.ok) throw Error();
-          html = await response.text();
-        }
-        const data = JSON.stringify({
-          student: true,
-          course: { ...course.value, blocks: exported },
-        }).replace(/</g, "\\u003c");
-        html = html.replace(
-          /(<script id="seed" type="application\/json">)[\s\S]*?(<\/script>)/,
-          (_, a, b) => a + data + b,
-        );
+        const html = await renderStudentPage({ ...course.value, blocks: exported });
         exportFile(html, filename() + ".html", "text/html;charset=utf-8");
         notify("HTML для обучающегося экспортирован.");
       } catch {
@@ -418,7 +404,7 @@ export default {
       }}</span
       ><button @click="importFile.click()">Импорт</button
       ><button @click="exportJSON">JSON ↓</button
-      ><button @click="exportHTML">HTML ↓</button
+      ><button title="Скачать страницу ученика одним HTML-файлом" @click="exportHTML">HTML ↓</button
       ><button @click="toggle">
         {{ mode === "edit" ? "▷ Предпросмотр" : "← Редактор" }}</button
       ><button class="primary" @click="save(true)">Сохранить</button>
@@ -502,22 +488,7 @@ export default {
       </div>
     </aside>
   </div>
-  <main v-else class="lesson">
-    <div class="lesson-head">
-      <div class="eyebrow">
-        Учебный курс{{ student ? "" : " · Предпросмотр" }}
-      </div>
-      <h1>{{ course.title }}</h1>
-      <p>{{ course.description }}</p>
-    </div>
-    <article
-      v-for="b in visible"
-      :key="b.id + '-' + previewKey"
-      class="lesson-content"
-    >
-      <ModuleView :block="b" :interactive="true" :student="student" />
-    </article>
-  </main>
+  <CourseLesson v-else :key="previewKey" :course="course" :student="student" />
   <input
     v-if="!student"
     ref="importFile"

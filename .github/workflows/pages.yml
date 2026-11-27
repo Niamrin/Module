@@ -22,7 +22,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Verify web and offline entry points
-        run: test -s dist/index.html && test -s dist/course_builder_vue3.html
+        run: test -s dist/index.html && test -s dist/course_builder_vue3.html && test -s dist/student-template.html
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
