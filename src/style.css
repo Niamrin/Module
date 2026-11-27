@@ -23,3 +23,6 @@
 .mapbox .map-region{transform:none;border-radius:5px;background:rgba(183,212,37,.38);border:2px solid #607400;color:#192400;text-shadow:0 0 3px white}
 .mapbox .map-region:hover,.mapbox .map-region.active{background:rgba(183,212,37,.58)}
 .map-editor .map-resize{position:absolute;transform:translate(-50%,-50%);z-index:2;display:grid;place-items:center;width:22px;height:22px;border-radius:5px;padding:0;background:#364613;color:white;cursor:nwse-resize;touch-action:none}
+.block-canvas .block{position:relative}.block-canvas .block-canvas{padding:8px;border-left:2px solid #d7dfa9;margin:10px 0}
+.nested-add{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}.nested-add select{max-width:100%}
+.nested-content{margin:12px 0}.spoiler>.nested-content{padding:0 14px 12px}

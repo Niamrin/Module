@@ -1,5 +1,5 @@
 <script>
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, provide, nextTick } from "vue";
 import {
   types,
   make,
@@ -10,10 +10,11 @@ import {
 } from "./model.js";
 import ModuleView from "./components/ModuleView.vue";
 import ModuleSettings from "./components/ModuleSettings.vue";
-import ModuleEditor from "./components/ModuleEditor.vue";
+import BlockCanvas from "./components/BlockCanvas.vue";
+import { walkBlocks, childLists, visibleTree } from "./block-tree.js";
 import Field from "./components/Field.vue";
 export default {
-  components: { ModuleSettings, ModuleView, ModuleEditor, Field },
+  components: { ModuleSettings, ModuleView, BlockCanvas, Field },
   setup() {
     const KEY = "course-builder-vue3-v1",
       seed = JSON.parse(document.getElementById("seed")?.textContent || "null"),
@@ -30,7 +31,7 @@ export default {
           demo(),
       );
     } catch {
-      initial = demo();
+      initial = normalize(demo());
     }
     const course = ref(initial),
       selected = ref(initial.blocks[0]?.id || null),
@@ -43,9 +44,16 @@ export default {
       importFile = ref(null),
       previewKey = ref(0);
     let timer;
-    const current = computed(() =>
-        course.value.blocks.find((b) => b.id === selected.value),
-      ),
+    const entries = computed(
+      () =>
+        new Map(
+          Array.from(walkBlocks(course.value.blocks), (entry) => [
+            entry.block.id,
+            entry,
+          ]),
+        ),
+    );
+    const current = computed(() => entries.value.get(selected.value)?.block),
       visible = computed(() => course.value.blocks.filter((b) => !b.hidden));
     const groups = Object.entries(types).reduce((a, [k, v]) => {
       (a[v[2]] ??= []).push({ type: k, title: v[0], glyph: v[1] });
@@ -80,9 +88,9 @@ export default {
             ?.scrollIntoView({ behavior: "smooth" });
       }
     }
-    async function add(type, at = course.value.blocks.length) {
+    async function add(type, list = course.value.blocks, at = list.length) {
       let b = make(type);
-      course.value.blocks.splice(at, 0, b);
+      list.splice(at, 0, b);
       select(b.id);
       await nextTick();
       document
@@ -90,7 +98,7 @@ export default {
         ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
     function action(id, a) {
-      let bs = course.value.blocks,
+      let bs = entries.value.get(id)?.list || [],
         i = bs.findIndex((b) => b.id === id);
       if (i < 0) return;
       let b = bs[i];
@@ -99,16 +107,22 @@ export default {
         [bs[i + 1], bs[i]] = [b, bs[i + 1]];
       if (a === "hide") b.hidden = !b.hidden;
       if (a === "copy") {
-        let c = normalize({
-          blocks: [{ ...JSON.parse(JSON.stringify(b)), id: null }],
-        }).blocks[0];
+        let c = normalize(
+          {
+            blocks: [b],
+          },
+          new Set(),
+          true,
+        ).blocks[0];
         bs.splice(i + 1, 0, c);
         select(c.id);
       }
       if (a === "delete" && confirm("Удалить модуль?")) {
+        const parent = entries.value.get(id)?.parents.at(-1);
+        const affected = editPath.value.includes(id) || selected.value === id;
         bs.splice(i, 1);
-        if (selected.value === id)
-          select(bs[Math.min(i, bs.length - 1)]?.id || null);
+        if (affected)
+          select(bs[Math.min(i, bs.length - 1)]?.id || parent?.id || null);
       }
     }
     function dragStart(event, kind, value) {
@@ -120,37 +134,76 @@ export default {
       drag.value = null;
       over.value = null;
     }
-    function insertionIndex(event) {
-      const cards = document.querySelectorAll("#canvas > .block");
+    function insertionIndex(event, canvas) {
+      const cards = canvas.querySelectorAll(":scope > .block");
       for (let i = 0; i < cards.length; i++) {
         const rect = cards[i].getBoundingClientRect();
         if (event.clientY < rect.top + rect.height / 2) return i;
       }
       return cards.length;
     }
-    function dragOver(event) {
+    function dragOver(
+      event,
+      list = course.value.blocks,
+      canvas = document.getElementById("canvas"),
+    ) {
       if (!drag.value) return;
       event.preventDefault();
       event.dataTransfer.dropEffect =
         drag.value.kind === "new" ? "copy" : "move";
-      over.value = insertionIndex(event);
+      over.value = { list, at: insertionIndex(event, canvas) };
     }
-    function drop(event) {
+    function drop(
+      event,
+      list = course.value.blocks,
+      canvas = document.getElementById("canvas"),
+    ) {
       if (!drag.value) return;
       event.preventDefault();
       const { kind, value } = drag.value;
-      const at = insertionIndex(event);
+      const at = insertionIndex(event, canvas);
       dragEnd();
       if (kind === "new") {
-        add(value, at);
+        add(value, list, at);
         return;
       }
-      const blocks = course.value.blocks;
-      const from = blocks.findIndex((block) => block.id === value);
-      if (from < 0 || at === from || at === from + 1) return;
-      const [block] = blocks.splice(from, 1);
-      blocks.splice(at > from ? at - 1 : at, 0, block);
+      const source = entries.value.get(value);
+      if (!source) return;
+      for (const { block } of walkBlocks([source.block])) {
+        if (childLists(block).includes(list)) return;
+      }
+      const from = source.list.indexOf(source.block);
+      source.list.splice(from, 1);
+      list.splice(
+        source.list === list && from < at ? at - 1 : at,
+        0,
+        source.block,
+      );
+      select(source.block.id);
     }
+    const editPath = computed(() => {
+      const entry = entries.value.get(editing.value);
+      return entry ? [...entry.parents, entry.block].map((b) => b.id) : [];
+    });
+    function finishEdit(id) {
+      editing.value = entries.value.get(id)?.parents.at(-1)?.id || null;
+      selected.value = editing.value || id;
+    }
+    provide("courseCanvas", {
+      selected,
+      editPath,
+      drag,
+      over,
+      add,
+      select,
+      finishEdit,
+      action,
+      notify,
+      dragStart,
+      dragEnd,
+      dragOver,
+      drop,
+    });
     function toggle() {
       mode.value = mode.value === "edit" ? "preview" : "edit";
       previewKey.value++;
@@ -167,7 +220,7 @@ export default {
       if (confirm("Заменить текущий курс? Сохраните JSON, если он нужен."))
         replace(
           example
-            ? demo()
+            ? normalize(demo())
             : { version: 1, title: "Новый курс", description: "", blocks: [] },
         );
     }
@@ -199,7 +252,8 @@ export default {
       );
     }
     async function exportHTML() {
-      const bad = visible.value.find(
+      const exported = visibleTree(course.value.blocks);
+      const bad = Array.from(walkBlocks(exported), (entry) => entry.block).find(
         (b) =>
           b.type === "quiz" &&
           (!b.data.questions.length ||
@@ -222,7 +276,7 @@ export default {
         }
         const data = JSON.stringify({
           student: true,
-          course: { ...course.value, blocks: visible.value },
+          course: { ...course.value, blocks: exported },
         }).replace(/</g, "\\u003c");
         html = html.replace(
           /(<script id="seed" type="application\/json">)[\s\S]*?(<\/script>)/,
@@ -338,91 +392,7 @@ export default {
             ⚙ Настройки курса
           </button>
         </div>
-        <div id="canvas">
-          <article
-            v-for="(b, i) in course.blocks"
-            :key="b.id"
-            :id="'block-' + b.id"
-            class="block"
-            :class="{
-              selected: selected === b.id,
-              'hidden-block': b.hidden,
-              'insert-before': over === i,
-              'insert-after': over === course.blocks.length && i === over - 1,
-            }"
-          >
-            <div class="block-bar" @click="select(b.id, true)">
-              <span
-                class="handle"
-                draggable="true"
-                @dragstart="dragStart($event, 'move', b.id)"
-                @dragend="dragEnd"
-                >⠿</span
-              ><span class="name"
-                >{{ String(i + 1).padStart(2, "0") }} · {{ types[b.type][0]
-                }}{{ b.hidden ? " · скрыт" : "" }}</span
-              >
-              <div class="actions">
-                <button
-                  class="small ghost edit-toggle"
-                  :aria-expanded="editing === b.id"
-                  @click.stop="
-                    editing === b.id ? (editing = null) : select(b.id)
-                  "
-                >
-                  {{ editing === b.id ? "Готово" : "Изменить" }}</button
-                ><button
-                  class="icon ghost"
-                  title="Выше"
-                  :disabled="i === 0"
-                  @click.stop="action(b.id, 'up')"
-                >
-                  ↑</button
-                ><button
-                  class="icon ghost"
-                  title="Ниже"
-                  :disabled="i === course.blocks.length - 1"
-                  @click.stop="action(b.id, 'down')"
-                >
-                  ↓</button
-                ><button
-                  class="icon ghost"
-                  title="Скрыть / показать"
-                  @click.stop="action(b.id, 'hide')"
-                >
-                  {{ b.hidden ? "◉" : "◌" }}</button
-                ><button
-                  class="icon ghost"
-                  title="Дублировать"
-                  @click.stop="action(b.id, 'copy')"
-                >
-                  ⧉</button
-                ><button
-                  class="small ghost danger"
-                  title="Удалить"
-                  @click.stop="action(b.id, 'delete')"
-                >
-                  Удалить
-                </button>
-              </div>
-            </div>
-            <div class="block-content">
-              <ModuleEditor
-                v-if="editing === b.id"
-                :block="b"
-                @notify="notify"
-              />
-              <ModuleView v-else :block="b" :interactive="false" />
-            </div>
-          </article>
-          <div
-            v-if="!course.blocks.length"
-            class="empty"
-            :class="{ 'drop-active': drag && over === 0 }"
-          >
-            Добавьте первый модуль из библиотеки слева.
-          </div>
-        </div>
+        <BlockCanvas id="canvas" :blocks="course.blocks" />
         <button class="add-bottom" @click="add('text')">
           ＋ Добавить текстовый модуль
         </button>
