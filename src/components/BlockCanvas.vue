@@ -5,6 +5,9 @@ import ModuleView from "./ModuleView.vue";
 import ModuleEditor from "./ModuleEditor.vue";
 defineProps({ blocks: Array, nested: Boolean });
 const {
+  activeSlide,
+  course,
+  transferSlide,
   selected,
   editPath,
   drag,
@@ -95,6 +98,27 @@ const {
             Удалить
           </button>
         </div>
+        <select
+          v-if="activeSlide && course.slides.length > 1"
+          aria-label="Перенести модуль на слайд"
+          title="Перенести модуль на слайд"
+          value=""
+          @click.stop
+          @change.stop="
+            transferSlide($event.target.value, b.id);
+            $event.target.value = '';
+          "
+        >
+          <option value="" disabled>На слайд…</option>
+          <option
+            v-for="(s, n) in course.slides"
+            :key="s.id"
+            :value="s.id"
+            :disabled="s.id === activeSlide.id"
+          >
+            {{ n + 1 }} · {{ s.title }}
+          </option>
+        </select>
       </div>
       <div class="block-content">
         <ModuleEditor

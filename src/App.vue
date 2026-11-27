@@ -1,5 +1,5 @@
 <script>
-import { ref, computed, watch, provide, nextTick } from "vue";
+import { ref, computed, watch, shallowRef, provide, nextTick } from "vue";
 import {
   types,
   uid,
@@ -13,12 +13,13 @@ import { handoffCourse } from "./handoff-course.js";
 import CourseLesson from "./components/CourseLesson.vue";
 import { renderStudentPage } from "./export-student.js";
 import ModuleSettings from "./components/ModuleSettings.vue";
+import SlideEditor from "./components/SlideEditor.vue";
 import BlockCanvas from "./components/BlockCanvas.vue";
 import { walkBlocks, childLists, visibleTree } from "./block-tree.js";
 import { useCourseHistory } from "./course-history.js";
 import Field from "./components/Field.vue";
 export default {
-  components: { ModuleSettings, CourseLesson, BlockCanvas, Field },
+  components: { SlideEditor, ModuleSettings, CourseLesson, BlockCanvas, Field },
   setup() {
     const exampleMode =
       new URLSearchParams(location.search).get("example") === "handoff";
@@ -46,7 +47,7 @@ export default {
       mode = ref(student || exampleMode ? "preview" : "edit"),
       editing = ref(null),
       drag = ref(null),
-      over = ref(null),
+      over = shallowRef(null),
       message = ref(""),
       saveOK = ref(true),
       importFile = ref(null),
@@ -63,6 +64,111 @@ export default {
     );
     const current = computed(() => entries.value.get(selected.value)?.block),
       visible = computed(() => course.value.blocks.filter((b) => !b.hidden));
+    const slideId = ref(null);
+    const activeSlide = computed(() =>
+      course.value.format === "presentation"
+        ? course.value.slides.find((s) => s.id === slideId.value) ||
+          course.value.slides[0]
+        : null,
+    );
+    const canvasBlocks = computed(() =>
+      activeSlide.value
+        ? course.value.blocks.filter((b) => b.slideId === activeSlide.value.id)
+        : course.value.blocks,
+    );
+    function chooseSlide(id) {
+      slideId.value = id;
+      selected.value = null;
+      editing.value = null;
+    }
+    function slideAction(action) {
+      const draft = course.value,
+        slides = draft.slides,
+        slide = activeSlide.value;
+      const at = slides.indexOf(slide);
+      if (
+        action === "delete" &&
+        !confirm("Удалить слайд вместе со всеми его модулями?")
+      )
+        return;
+      const labels = {
+        add: "Добавление",
+        copy: "Дублирование",
+        earlier: "Перестановка",
+        later: "Перестановка",
+        delete: "Удаление",
+      };
+      history.describe(labels[action] + " слайда");
+      if (action === "add" || action === "copy") {
+        const next = {
+          id: uid(),
+          title: action === "copy" ? slide.title + " (копия)" : "Новый слайд",
+        };
+        if (action === "copy") {
+          const copies = normalize(
+            { blocks: canvasBlocks.value },
+            new Set(),
+            true,
+          ).blocks;
+          for (const block of copies) {
+            block.slideId = next.id;
+            draft.blocks.push(block);
+          }
+        }
+        slides.splice(at + 1, 0, next);
+        chooseSlide(next.id);
+      } else if (action === "delete") {
+        draft.blocks = draft.blocks.filter((b) => b.slideId !== slide.id);
+        slides.splice(at, 1);
+        if (!slides.length) slides.push({ id: uid(), title: "Новый слайд" });
+        chooseSlide(slides[Math.min(at, slides.length - 1)].id);
+      } else {
+        const dest = at + (action === "earlier" ? -1 : 1);
+        if (dest >= 0 && dest < slides.length)
+          slides.splice(dest, 0, slides.splice(at, 1)[0]);
+      }
+      orderBySlide();
+    }
+    function orderBySlide() {
+      const draft = course.value;
+      const order = new Map(draft.slides.map((s, i) => [s.id, i]));
+      draft.blocks.sort(
+        (a, b) => (order.get(a.slideId) ?? 0) - (order.get(b.slideId) ?? 0),
+      );
+    }
+    function transferSlide(id, blockId) {
+      const payload = blockId ? { kind: "move", value: blockId } : drag.value;
+      if (!payload) return;
+      dragEnd();
+      if (payload.kind === "new") {
+        chooseSlide(id);
+        add(payload.value);
+        return;
+      }
+      const source = entries.value.get(payload.value);
+      if (
+        !source ||
+        (source.list === course.value.blocks && source.block.slideId === id)
+      )
+        return;
+      history.describe("Перенос модуля на другой слайд");
+      source.list.splice(source.list.indexOf(source.block), 1);
+      source.block.slideId = id;
+      course.value.blocks.push(source.block);
+      orderBySlide();
+      select(source.block.id);
+    }
+    function targetPosition(list, at) {
+      if (!activeSlide.value || list !== canvasBlocks.value)
+        return { list, at };
+      const all = course.value.blocks;
+      const index = list[at]
+        ? all.indexOf(list[at])
+        : list.length
+          ? all.indexOf(list.at(-1)) + 1
+          : all.length;
+      return { list: all, at: index };
+    }
     const historyOpen = ref(false);
     const history = useCourseHistory(
       course,
@@ -71,6 +177,9 @@ export default {
       () => {
         if (!entries.value.has(editing.value)) editing.value = null;
         if (!entries.value.has(selected.value)) selected.value = editing.value;
+        const entry = entries.value.get(selected.value);
+        if (entry && activeSlide.value)
+          slideId.value = (entry.parents[0] || entry.block).slideId;
         dragEnd();
       },
     );
@@ -97,6 +206,9 @@ export default {
     }
     watch(course, () => save(), { deep: true });
     async function select(id, scroll = false) {
+      const entry = entries.value.get(id);
+      if (entry && activeSlide.value)
+        slideId.value = (entry.parents[0] || entry.block).slideId;
       selected.value = id;
       editing.value = id;
       if (scroll) {
@@ -107,13 +219,17 @@ export default {
             ?.scrollIntoView({ behavior: "smooth" });
       }
     }
-    async function add(type, list = course.value.blocks, at = list.length) {
+    async function add(type, list = canvasBlocks.value, at = list.length) {
       history.describe("Добавление модуля · " + types[type][0]);
+      ({ list, at } = targetPosition(list, at));
       let b = make(type);
       if (list === course.value.blocks && course.value.slides?.length)
         b.slideId =
-          (list[at] || list[at - 1])?.slideId || course.value.slides[0].id;
+          activeSlide.value?.id ||
+          (list[at] || list[at - 1])?.slideId ||
+          course.value.slides[0].id;
       list.splice(at, 0, b);
+      if (activeSlide.value && list === course.value.blocks) orderBySlide();
       select(b.id);
       await nextTick();
       document
@@ -133,9 +249,20 @@ export default {
         delete: "Удаление",
       };
       history.describe(names[a] + " · " + types[b.type][0]);
-      if (a === "up" && i > 0) [bs[i - 1], bs[i]] = [b, bs[i - 1]];
-      if (a === "down" && i < bs.length - 1)
-        [bs[i + 1], bs[i]] = [b, bs[i + 1]];
+      if (a === "up" || a === "down") {
+        const siblings = bs === course.value.blocks ? canvasBlocks.value : bs;
+        const neighbor = siblings[siblings.indexOf(b) + (a === "up" ? -1 : 1)];
+        if (neighbor) {
+          const j = bs.indexOf(neighbor);
+          if (
+            bs === course.value.blocks &&
+            !activeSlide.value &&
+            course.value.slides?.length
+          )
+            [b.slideId, neighbor.slideId] = [neighbor.slideId, b.slideId];
+          [bs[i], bs[j]] = [neighbor, b];
+        }
+      }
       if (a === "hide") b.hidden = !b.hidden;
       if (a === "copy") {
         let c = normalize(
@@ -176,7 +303,7 @@ export default {
     }
     function dragOver(
       event,
-      list = course.value.blocks,
+      list = canvasBlocks.value,
       canvas = document.getElementById("canvas"),
     ) {
       if (!drag.value) return;
@@ -187,18 +314,19 @@ export default {
     }
     function drop(
       event,
-      list = course.value.blocks,
+      list = canvasBlocks.value,
       canvas = document.getElementById("canvas"),
     ) {
       if (!drag.value) return;
       event.preventDefault();
       const { kind, value } = drag.value;
-      const at = insertionIndex(event, canvas);
+      let at = insertionIndex(event, canvas);
       dragEnd();
       if (kind === "new") {
         add(value, list, at);
         return;
       }
+      ({ list, at } = targetPosition(list, at));
       const source = entries.value.get(value);
       if (!source) return;
       for (const { block } of walkBlocks([source.block])) {
@@ -206,12 +334,24 @@ export default {
       }
       const from = source.list.indexOf(source.block);
       history.describe("Перенос модуля · " + types[source.block.type][0]);
+      if (
+        list === course.value.blocks &&
+        !activeSlide.value &&
+        course.value.slides?.length
+      ) {
+        source.block.slideId =
+          (list[at] || list[at - 1])?.slideId || course.value.slides[0].id;
+      }
       source.list.splice(from, 1);
       list.splice(
         source.list === list && from < at ? at - 1 : at,
         0,
         source.block,
       );
+      if (list === course.value.blocks && activeSlide.value) {
+        source.block.slideId = activeSlide.value.id;
+        orderBySlide();
+      }
       select(source.block.id);
     }
     const editPath = computed(() => {
@@ -223,6 +363,9 @@ export default {
       selected.value = editing.value || id;
     }
     provide("courseCanvas", {
+      activeSlide,
+      course,
+      transferSlide,
       selected,
       editPath,
       drag,
@@ -256,6 +399,7 @@ export default {
         draft.slides = [slide];
         draft.blocks.forEach((block) => (block.slideId = slide.id));
       }
+      if (draft.slides?.length) orderBySlide();
       draft.format = format;
     }
     function newCourse(example = false) {
@@ -325,6 +469,11 @@ export default {
     return {
       ...history,
       historyOpen,
+      activeSlide,
+      canvasBlocks,
+      chooseSlide,
+      slideAction,
+      transferSlide,
       course,
       student,
       selected,
@@ -482,7 +631,16 @@ export default {
             ⚙ Настройки курса
           </button>
         </div>
-        <BlockCanvas id="canvas" :blocks="course.blocks" />
+        <SlideEditor
+          v-if="activeSlide"
+          :slides="course.slides"
+          :active="activeSlide"
+          :dragging="!!drag"
+          @select="chooseSlide"
+          @action="slideAction"
+          @transfer="transferSlide"
+        />
+        <BlockCanvas id="canvas" :blocks="canvasBlocks" />
         <button class="add-bottom" @click="add('text')">
           ＋ Добавить текстовый модуль
         </button>

@@ -39,3 +39,7 @@
 .slide-reader section{min-width:0}.slide-reader .lesson-content{margin:0;padding:0 0 16px}
 .slide-nav{border-top:1px solid var(--line);padding-top:16px;margin-top:20px}.slide-nav button{min-height:44px}
 .example-link{display:inline-block;margin:0 0 16px;color:#465d15}
+.slide-tools{border:1px solid var(--line);border-radius:12px;padding:14px;background:white;margin-bottom:14px}
+.slide-tools-head,.slide-picker,.slide-commands{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.slide-tools-head{justify-content:space-between}
+.slide-picker{margin:12px 0}.slide-picker button{max-width:100%;overflow-wrap:anywhere}.slide-picker [aria-pressed=true]{border-color:#748536;background:#eff4d7}.slide-picker .drop-active{outline:2px dashed #71832f}
+.slide-commands button,.block-bar select{font-size:12px}.block-bar select{max-width:11rem}
