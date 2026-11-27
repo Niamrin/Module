@@ -12,6 +12,7 @@ import ModuleView from "./components/ModuleView.vue";
 import ModuleSettings from "./components/ModuleSettings.vue";
 import BlockCanvas from "./components/BlockCanvas.vue";
 import { walkBlocks, childLists, visibleTree } from "./block-tree.js";
+import { useCourseHistory } from "./course-history.js";
 import Field from "./components/Field.vue";
 export default {
   components: { ModuleSettings, ModuleView, BlockCanvas, Field },
@@ -55,6 +56,17 @@ export default {
     );
     const current = computed(() => entries.value.get(selected.value)?.block),
       visible = computed(() => course.value.blocks.filter((b) => !b.hidden));
+    const historyOpen = ref(false);
+    const history = useCourseHistory(
+      course,
+      !student,
+      () => mode.value === "edit",
+      () => {
+        if (!entries.value.has(editing.value)) editing.value = null;
+        if (!entries.value.has(selected.value)) selected.value = editing.value;
+        dragEnd();
+      },
+    );
     const groups = Object.entries(types).reduce((a, [k, v]) => {
       (a[v[2]] ??= []).push({ type: k, title: v[0], glyph: v[1] });
       return a;
@@ -89,6 +101,7 @@ export default {
       }
     }
     async function add(type, list = course.value.blocks, at = list.length) {
+      history.describe("Добавление модуля · " + types[type][0]);
       let b = make(type);
       list.splice(at, 0, b);
       select(b.id);
@@ -102,6 +115,14 @@ export default {
         i = bs.findIndex((b) => b.id === id);
       if (i < 0) return;
       let b = bs[i];
+      const names = {
+        up: "Перемещение",
+        down: "Перемещение",
+        hide: "Видимость",
+        copy: "Дублирование",
+        delete: "Удаление",
+      };
+      history.describe(names[a] + " · " + types[b.type][0]);
       if (a === "up" && i > 0) [bs[i - 1], bs[i]] = [b, bs[i - 1]];
       if (a === "down" && i < bs.length - 1)
         [bs[i + 1], bs[i]] = [b, bs[i + 1]];
@@ -173,6 +194,7 @@ export default {
         if (childLists(block).includes(list)) return;
       }
       const from = source.list.indexOf(source.block);
+      history.describe("Перенос модуля · " + types[source.block.type][0]);
       source.list.splice(from, 1);
       list.splice(
         source.list === list && from < at ? at - 1 : at,
@@ -230,6 +252,7 @@ export default {
       try {
         let c = normalize(JSON.parse(await file.text()));
         if (confirm("Заменить текущий курс импортированным?")) {
+          history.describe("Импорт курса");
           replace(c);
           notify("Курс импортирован.");
         }
@@ -292,6 +315,8 @@ export default {
     }
     if (!student) save();
     return {
+      ...history,
+      historyOpen,
       course,
       student,
       selected,
@@ -336,6 +361,58 @@ export default {
       </div>
     </div>
     <div class="actions">
+      <div v-if="mode === 'edit'" class="history-controls">
+        <button
+          :disabled="!canUndo"
+          title="Отменить (Ctrl/⌘ + Z)"
+          @click="restore(cursor - 1)"
+        >
+          ↶ Отменить
+        </button>
+        <button
+          :disabled="!canRedo"
+          title="Повторить (Ctrl/⌘ + Shift + Z)"
+          @click="restore(cursor + 1)"
+        >
+          ↷ Повторить
+        </button>
+        <button
+          :aria-expanded="historyOpen"
+          aria-controls="course-history"
+          @click="historyOpen = !historyOpen"
+        >
+          История
+        </button>
+        <section
+          v-if="historyOpen"
+          id="course-history"
+          class="history-panel"
+          aria-label="История изменений"
+        >
+          <div class="settings-bar">
+            <strong>История изменений</strong
+            ><button aria-label="Закрыть историю" @click="historyOpen = false">
+              ×
+            </button>
+          </div>
+          <ol reversed>
+            <li v-for="step in revisions" :key="step.index">
+              <button
+                :aria-current="cursor === step.index ? 'step' : undefined"
+                @click="restore(step.index)"
+              >
+                <time>{{
+                  new Date(step.time).toLocaleTimeString("ru", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                }}</time>
+                {{ step.label }}
+              </button>
+            </li>
+          </ol>
+        </section>
+      </div>
       <span class="status">{{
         saveOK ? "Сохранено локально" : "Не сохранено"
       }}</span

@@ -26,3 +26,7 @@
 .block-canvas .block{position:relative}.block-canvas .block-canvas{padding:8px;border-left:2px solid #d7dfa9;margin:10px 0}
 .nested-add{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}.nested-add select{max-width:100%}
 .nested-content{margin:12px 0}.spoiler>.nested-content{padding:0 14px 12px}
+.history-controls{position:relative;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.history-panel{position:absolute;z-index:10;top:calc(100% + 6px);left:0;width:min(300px,86vw);padding:12px;background:white;color:#243128;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 26px #17220b26}
+.history-panel ol{list-style:none;max-height:45vh;overflow-y:auto;margin:8px 0 0;padding:0}
+.history-panel li button{width:100%;text-align:left;border:0;white-space:normal}.history-panel time{color:#596655;margin-right:6px}.history-panel [aria-current=step]{background:#e9f2c2}
