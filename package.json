@@ -1,0 +1,20 @@
+{
+  "name": "vue-course-builder",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:offline": "node scripts/build-offline.mjs",
+    "predev": "npm run build:offline",
+    "prebuild": "npm run build:offline"
+  },
+  "dependencies": {
+    "vue": "3.5.13"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
