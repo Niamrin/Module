@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
+import { areaStyle } from "./geometry.js";
 import { rich, safeMedia } from "../../../model.js";
 const props = defineProps({
   blockId: String,
@@ -28,8 +29,9 @@ watch(
           v-for="(p, i) in data.points"
           :key="p.id"
           class="hotspot"
-          :class="{ active: point === p.id }"
-          :style="{ left: p.x + '%', top: p.y + '%' }"
+          :class="{ active: point === p.id, 'map-region': p.shape === 'rect' }"
+          :aria-expanded="point === p.id"
+          :style="areaStyle(p)"
           :aria-label="p.title || 'Точка ' + (i + 1)"
           @click="point = point === p.id ? null : p.id"
         >

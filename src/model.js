@@ -1,3 +1,4 @@
+import { geometry } from "./components/modules/mapping/geometry.js";
 import DOMPurify from 'dompurify';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>globalThis.crypto?.randomUUID?.()||'m'+Date.now().toString(36)+Math.random().toString(36).slice(2);
@@ -19,7 +20,7 @@ function normalize(raw){if(!raw||!Array.isArray(raw.blocks))throw Error('Нев�
      legacy.data.questions.push(block);
    }else{legacy=null; blocks.push(block)}
  }
- return {version:1,title:str(raw.title)||'Новый курс',description:str(raw.description),blocks:blocks.filter(b=>b&&Object.hasOwn(types,b.type)).map(b=>{let v=make(b.type),d=b.data&&typeof b.data==='object'?b.data:{};if(typeof b.id==='string'&&/^[\w-]{1,100}$/.test(b.id)&&!ids.has(b.id))v.id=b.id;ids.add(v.id);v.hidden=!!b.hidden;let z=v.data;for(let k of Object.keys(z)){if(typeof z[k]==='string')z[k]=str(d[k]??z[k]);else if(typeof z[k]==='boolean')z[k]=typeof d[k]==='boolean'?d[k]:z[k];}if(b.type==='image')z.width=Math.min(100,Math.max(25,Number(d.width)||100));if(b.type==='list')z.items=arr(d.items??z.items).map(str);if(b.type==='carousel')z.slides=arr(d.slides??z.slides).map(x=>({src:str(x?.src),caption:str(x?.caption),alt:str(x?.alt)}));if(b.type==='tabs')z.tabs=arr(d.tabs??z.tabs).map(x=>({title:str(x?.title),body:str(x?.body)}));if(b.type==='mapping')z.points=arr(d.points).map(x=>({id:uid(),x:Math.max(0,Math.min(100,Number(x?.x)||0)),y:Math.max(0,Math.min(100,Number(x?.y)||0)),title:str(x?.title),body:str(x?.body)}));if(v.type==='quiz'){
+ return {version:1,title:str(raw.title)||'Новый курс',description:str(raw.description),blocks:blocks.filter(b=>b&&Object.hasOwn(types,b.type)).map(b=>{let v=make(b.type),d=b.data&&typeof b.data==='object'?b.data:{};if(typeof b.id==='string'&&/^[\w-]{1,100}$/.test(b.id)&&!ids.has(b.id))v.id=b.id;ids.add(v.id);v.hidden=!!b.hidden;let z=v.data;for(let k of Object.keys(z)){if(typeof z[k]==='string')z[k]=str(d[k]??z[k]);else if(typeof z[k]==='boolean')z[k]=typeof d[k]==='boolean'?d[k]:z[k];}if(b.type==='image')z.width=Math.min(100,Math.max(25,Number(d.width)||100));if(b.type==='list')z.items=arr(d.items??z.items).map(str);if(b.type==='carousel')z.slides=arr(d.slides??z.slides).map(x=>({src:str(x?.src),caption:str(x?.caption),alt:str(x?.alt)}));if(b.type==='tabs')z.tabs=arr(d.tabs??z.tabs).map(x=>({title:str(x?.title),body:str(x?.body)}));if(b.type==='mapping')z.points=arr(d.points).map(x=>({id:uid(),...geometry(x || {}),title:str(x?.title),body:str(x?.body)}));if(v.type==='quiz'){
  for(const key of ['attempts','minutes','threshold']){
    const value=Number(d[key]);
    if(Number.isSafeInteger(value)&&value>=0) z[key]=Math.min(key==='threshold'?100:9999,value);

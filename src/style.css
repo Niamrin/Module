@@ -16,3 +16,10 @@
 .format-bold{font-weight:800}.format-italic{font-style:italic}.format-underline{text-decoration:underline}
 .writing-area{min-height:7rem;padding:12px 14px;outline:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .writing-area li p{margin:0}.rich p:empty::before{content:"\00a0"}
+.field .map-editor{display:block;width:fit-content;max-width:100%;line-height:0}
+.map-editor img{cursor:crosshair;user-select:none}
+.map-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.map-editor .hotspot{cursor:grab;touch-action:none}
+.mapbox .map-region{transform:none;border-radius:5px;background:rgba(183,212,37,.38);border:2px solid #607400;color:#192400;text-shadow:0 0 3px white}
+.mapbox .map-region:hover,.mapbox .map-region.active{background:rgba(183,212,37,.58)}
+.map-editor .map-resize{position:absolute;transform:translate(-50%,-50%);z-index:2;display:grid;place-items:center;width:22px;height:22px;border-radius:5px;padding:0;background:#364613;color:white;cursor:nwse-resize;touch-action:none}
