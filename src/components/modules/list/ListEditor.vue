@@ -6,9 +6,7 @@ defineEmits(["notify"]);
 </script>
 
 <template>
-  <label class="checkline"
-    ><input type="checkbox" v-model="data.ordered" />Нумерованный список</label
-  ><SubCard
+  <SubCard
     v-for="(_, i) in data.items"
     :key="i"
     :title="'Пункт ' + (i + 1)"

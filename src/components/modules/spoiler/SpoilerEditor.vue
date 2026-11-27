@@ -9,7 +9,5 @@ defineEmits(["notify"]);
   <Field label="Заголовок" v-model="data.title" /><RichField
     label="Скрытый текст"
     v-model="data.body"
-  /><label class="checkline"
-    ><input type="checkbox" v-model="data.open" />Раскрыт по умолчанию</label
-  >
+  />
 </template>

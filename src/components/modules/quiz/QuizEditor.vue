@@ -13,24 +13,7 @@ function setCorrect(q, o) {
 
 <template>
   <Field label="Название теста" v-model="data.title" />
-  <Field
-    label="Число попыток (0 — без ограничений)"
-    kind="number"
-    :max="9999"
-    v-model="data.attempts"
-  />
-  <Field
-    label="Время в минутах (0 — без таймера)"
-    kind="number"
-    :max="9999"
-    v-model="data.minutes"
-  />
-  <Field
-    label="Проходной балл, %"
-    kind="number"
-    :max="100"
-    v-model="data.threshold"
-  />
+
   <SubCard
     v-for="(q, n) in data.questions"
     :key="q.id"

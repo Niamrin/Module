@@ -9,10 +9,11 @@ import {
   exportFile,
 } from "./model.js";
 import ModuleView from "./components/ModuleView.vue";
+import ModuleSettings from "./components/ModuleSettings.vue";
 import ModuleEditor from "./components/ModuleEditor.vue";
 import Field from "./components/Field.vue";
 export default {
-  components: { ModuleView, ModuleEditor, Field },
+  components: { ModuleSettings, ModuleView, ModuleEditor, Field },
   setup() {
     const KEY = "course-builder-vue3-v1",
       seed = JSON.parse(document.getElementById("seed")?.textContent || "null"),
@@ -34,7 +35,8 @@ export default {
     const course = ref(initial),
       selected = ref(initial.blocks[0]?.id || null),
       mode = ref(student ? "preview" : "edit"),
-      dragId = ref(null),
+      editing = ref(null),
+      drag = ref(null),
       over = ref(null),
       message = ref(""),
       saveOK = ref(true),
@@ -69,17 +71,18 @@ export default {
     watch(course, () => save(), { deep: true });
     async function select(id, scroll = false) {
       selected.value = id;
+      editing.value = id;
       if (scroll) {
         await nextTick();
-        if (matchMedia("(max-width:800px)").matches)
+        if (id || matchMedia("(max-width:800px)").matches)
           document
-            .getElementById("inspectorPane")
+            .getElementById(id ? "block-" + id : "inspectorPane")
             ?.scrollIntoView({ behavior: "smooth" });
       }
     }
-    async function add(type) {
+    async function add(type, at = course.value.blocks.length) {
       let b = make(type);
-      course.value.blocks.push(b);
+      course.value.blocks.splice(at, 0, b);
       select(b.id);
       await nextTick();
       document
@@ -108,24 +111,45 @@ export default {
           select(bs[Math.min(i, bs.length - 1)]?.id || null);
       }
     }
-    function dragStart(e, id) {
-      dragId.value = id;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", id);
+    function dragStart(event, kind, value) {
+      drag.value = { kind, value };
+      event.dataTransfer.effectAllowed = kind === "new" ? "copy" : "move";
+      event.dataTransfer.setData("text/plain", value);
     }
     function dragEnd() {
-      dragId.value = null;
+      drag.value = null;
       over.value = null;
     }
-    function drop(id) {
-      let bs = course.value.blocks,
-        from = bs.findIndex((b) => b.id === dragId.value),
-        to = bs.findIndex((b) => b.id === id);
-      if (from >= 0 && to >= 0 && from !== to) {
-        let [b] = bs.splice(from, 1);
-        bs.splice(to, 0, b);
+    function insertionIndex(event) {
+      const cards = document.querySelectorAll("#canvas > .block");
+      for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        if (event.clientY < rect.top + rect.height / 2) return i;
       }
+      return cards.length;
+    }
+    function dragOver(event) {
+      if (!drag.value) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect =
+        drag.value.kind === "new" ? "copy" : "move";
+      over.value = insertionIndex(event);
+    }
+    function drop(event) {
+      if (!drag.value) return;
+      event.preventDefault();
+      const { kind, value } = drag.value;
+      const at = insertionIndex(event);
       dragEnd();
+      if (kind === "new") {
+        add(value, at);
+        return;
+      }
+      const blocks = course.value.blocks;
+      const from = blocks.findIndex((block) => block.id === value);
+      if (from < 0 || at === from || at === from + 1) return;
+      const [block] = blocks.splice(from, 1);
+      blocks.splice(at > from ? at - 1 : at, 0, block);
     }
     function toggle() {
       mode.value = mode.value === "edit" ? "preview" : "edit";
@@ -133,6 +157,7 @@ export default {
       window.scrollTo(0, 0);
     }
     function replace(c) {
+      editing.value = null;
       course.value = c;
       selected.value = c.blocks[0]?.id || null;
       previewKey.value++;
@@ -217,7 +242,9 @@ export default {
       student,
       selected,
       mode,
-      dragId,
+      editing,
+      drag,
+      dragOver,
       over,
       message,
       saveOK,
@@ -275,6 +302,9 @@ export default {
             v-for="item in items"
             :key="item.type"
             class="palette-btn"
+            draggable="true"
+            @dragstart="dragStart($event, 'new', item.type)"
+            @dragend="dragEnd"
             @click="add(item.type)"
           >
             <span class="glyph">{{ item.glyph }}</span
@@ -282,12 +312,18 @@ export default {
           </button></template
         >
         <p class="palette-note">
-          Нажмите на модуль, чтобы добавить его. Перетащите блок за ручку для
-          изменения порядка.
+          Перетащите модуль на полотно или нажмите, чтобы добавить в конец.
         </p>
       </div>
     </aside>
-    <main class="workspace">
+    <main
+      class="workspace"
+      @dragover="dragOver"
+      @drop="drop"
+      @dragleave="
+        !$event.currentTarget.contains($event.relatedTarget) && (over = null)
+      "
+    >
       <div class="workspace-inner">
         <div class="course-head">
           <div class="eyebrow">Учебная страница · черновик</div>
@@ -311,16 +347,15 @@ export default {
             :class="{
               selected: selected === b.id,
               'hidden-block': b.hidden,
-              dragover: over === b.id && dragId !== b.id,
+              'insert-before': over === i,
+              'insert-after': over === course.blocks.length && i === over - 1,
             }"
-            @dragover.prevent="over = b.id"
-            @drop.prevent="drop(b.id)"
           >
             <div class="block-bar" @click="select(b.id, true)">
               <span
                 class="handle"
                 draggable="true"
-                @dragstart="dragStart($event, b.id)"
+                @dragstart="dragStart($event, 'move', b.id)"
                 @dragend="dragEnd"
                 >⠿</span
               ><span class="name"
@@ -329,11 +364,13 @@ export default {
               >
               <div class="actions">
                 <button
-                  class="icon ghost"
-                  title="Редактировать"
-                  @click.stop="select(b.id, true)"
+                  class="small ghost edit-toggle"
+                  :aria-expanded="editing === b.id"
+                  @click.stop="
+                    editing === b.id ? (editing = null) : select(b.id)
+                  "
                 >
-                  ✎</button
+                  {{ editing === b.id ? "Готово" : "Изменить" }}</button
                 ><button
                   class="icon ghost"
                   title="Выше"
@@ -361,19 +398,28 @@ export default {
                 >
                   ⧉</button
                 ><button
-                  class="icon ghost danger"
+                  class="small ghost danger"
                   title="Удалить"
                   @click.stop="action(b.id, 'delete')"
                 >
-                  ×
+                  Удалить
                 </button>
               </div>
             </div>
             <div class="block-content">
-              <ModuleView :block="b" :interactive="false" />
+              <ModuleEditor
+                v-if="editing === b.id"
+                :block="b"
+                @notify="notify"
+              />
+              <ModuleView v-else :block="b" :interactive="false" />
             </div>
           </article>
-          <div v-if="!course.blocks.length" class="empty">
+          <div
+            v-if="!course.blocks.length"
+            class="empty"
+            :class="{ 'drop-active': drag && over === 0 }"
+          >
             Добавьте первый модуль из библиотеки слева.
           </div>
         </div>
@@ -384,14 +430,10 @@ export default {
     </main>
     <aside id="inspectorPane" class="inspector">
       <div class="sticky">
-        <ModuleEditor
+        <ModuleSettings
           v-if="current"
-          :key="current.id"
           :block="current"
           @settings="select(null)"
-          @copy="action(current.id, 'copy')"
-          @delete="action(current.id, 'delete')"
-          @notify="notify"
         /><template v-else
           ><div class="eyebrow">Параметры страницы</div>
           <h2 style="margin-top: 8px">Настройки курса</h2>

@@ -9,11 +9,5 @@ defineEmits(["notify"]);
   <MediaField v-model="data.src" @notify="$emit('notify', $event)" /><Field
     label="Альтернативный текст"
     v-model="data.alt"
-  /><Field label="Подпись" v-model="data.caption" /><Field
-    label="Ширина изображения, %"
-    kind="number"
-    :min="25"
-    :max="100"
-    v-model="data.width"
-  />
+  /><Field label="Подпись" v-model="data.caption" />
 </template>
