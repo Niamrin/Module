@@ -2,12 +2,14 @@
 import { ref, computed, watch, provide, nextTick } from "vue";
 import {
   types,
+  uid,
   make,
   demo,
   normalize,
   questionErrors,
   exportFile,
 } from "./model.js";
+import { handoffCourse } from "./handoff-course.js";
 import CourseLesson from "./components/CourseLesson.vue";
 import { renderStudentPage } from "./export-student.js";
 import ModuleSettings from "./components/ModuleSettings.vue";
@@ -18,7 +20,11 @@ import Field from "./components/Field.vue";
 export default {
   components: { ModuleSettings, CourseLesson, BlockCanvas, Field },
   setup() {
-    const KEY = "course-builder-vue3-v1",
+    const exampleMode =
+      new URLSearchParams(location.search).get("example") === "handoff";
+    const KEY = exampleMode
+        ? "course-builder-handoff-v1"
+        : "course-builder-vue3-v1",
       seed = JSON.parse(document.getElementById("seed")?.textContent || "null"),
       student = !!seed?.student;
     let initial;
@@ -27,17 +33,17 @@ export default {
         seed?.course ||
           JSON.parse(
             localStorage.getItem(KEY) ||
-              localStorage.getItem("course-builder-v1") ||
+              (!exampleMode && localStorage.getItem("course-builder-v1")) ||
               "null",
           ) ||
-          demo(),
+          (exampleMode ? handoffCourse() : demo()),
       );
     } catch {
-      initial = normalize(demo());
+      initial = normalize(exampleMode ? handoffCourse() : demo());
     }
     const course = ref(initial),
       selected = ref(initial.blocks[0]?.id || null),
-      mode = ref(student ? "preview" : "edit"),
+      mode = ref(student || exampleMode ? "preview" : "edit"),
       editing = ref(null),
       drag = ref(null),
       over = ref(null),
@@ -104,6 +110,9 @@ export default {
     async function add(type, list = course.value.blocks, at = list.length) {
       history.describe("Добавление модуля · " + types[type][0]);
       let b = make(type);
+      if (list === course.value.blocks && course.value.slides?.length)
+        b.slideId =
+          (list[at] || list[at - 1])?.slideId || course.value.slides[0].id;
       list.splice(at, 0, b);
       select(b.id);
       await nextTick();
@@ -136,6 +145,7 @@ export default {
           new Set(),
           true,
         ).blocks[0];
+        if (b.slideId) c.slideId = b.slideId;
         bs.splice(i + 1, 0, c);
         select(c.id);
       }
@@ -239,6 +249,15 @@ export default {
       previewKey.value++;
       mode.value = "edit";
     }
+    function setFormat(format) {
+      const draft = course.value;
+      if (format === "presentation" && !draft.slides?.length) {
+        const slide = { id: uid(), title: "Начало курса" };
+        draft.slides = [slide];
+        draft.blocks.forEach((block) => (block.slideId = slide.id));
+      }
+      draft.format = format;
+    }
     function newCourse(example = false) {
       if (confirm("Заменить текущий курс? Сохраните JSON, если он нужен."))
         replace(
@@ -290,7 +309,10 @@ export default {
         return;
       }
       try {
-        const html = await renderStudentPage({ ...course.value, blocks: exported });
+        const html = await renderStudentPage({
+          ...course.value,
+          blocks: exported,
+        });
         exportFile(html, filename() + ".html", "text/html;charset=utf-8");
         notify("HTML для обучающегося экспортирован.");
       } catch {
@@ -329,6 +351,7 @@ export default {
       drop,
       toggle,
       newCourse,
+      setFormat,
       importJSON,
       exportJSON,
       exportHTML,
@@ -404,7 +427,11 @@ export default {
       }}</span
       ><button @click="importFile.click()">Импорт</button
       ><button @click="exportJSON">JSON ↓</button
-      ><button title="Скачать страницу ученика одним HTML-файлом" @click="exportHTML">HTML ↓</button
+      ><button
+        title="Скачать страницу ученика одним HTML-файлом"
+        @click="exportHTML"
+      >
+        HTML ↓</button
       ><button @click="toggle">
         {{ mode === "edit" ? "▷ Предпросмотр" : "← Редактор" }}</button
       ><button class="primary" @click="save(true)">Сохранить</button>
@@ -470,6 +497,23 @@ export default {
         /><template v-else
           ><div class="eyebrow">Параметры страницы</div>
           <h2 style="margin-top: 8px">Настройки курса</h2>
+          <label class="field"
+            ><span class="field-label">Формат просмотра</span>
+            <select
+              :value="course.format || 'page'"
+              @change="setFormat($event.target.value)"
+            >
+              <option value="page">Страница</option>
+              <option value="presentation">Презентация</option>
+            </select>
+          </label>
+          <a
+            class="example-link"
+            href="?example=handoff"
+            target="_blank"
+            rel="noopener"
+            >Посмотреть пример на 4 слайда ↗</a
+          >
           <Field label="Название курса" v-model="course.title" /><Field
             label="Описание"
             kind="textarea"
