@@ -205,7 +205,23 @@ export default {
       }
     }
     watch(course, () => save(), { deep: true });
+    const inspectorOpen = ref(true);
+    function pick(id) {
+      if (selected.value === id) return;
+      selected.value = id;
+      editing.value = editPath.value.includes(id) ? id : entries.value.get(id)?.parents.at(-1)?.id || null;
+    }
+    async function toggleInspector() {
+      inspectorOpen.value = !inspectorOpen.value;
+      if (inspectorOpen.value && matchMedia("(max-width:800px)").matches) {
+        await nextTick();
+        document
+          .getElementById("inspectorPane")
+          ?.scrollIntoView({ block: "start" });
+      }
+    }
     async function select(id, scroll = false) {
+      if (!id) inspectorOpen.value = true;
       const entry = entries.value.get(id);
       if (entry && activeSlide.value)
         slideId.value = (entry.parents[0] || entry.block).slideId;
@@ -363,6 +379,7 @@ export default {
       selected.value = editing.value || id;
     }
     provide("courseCanvas", {
+      pick,
       activeSlide,
       course,
       transferSlide,
@@ -468,6 +485,8 @@ export default {
     if (!student) save();
     return {
       ...history,
+      inspectorOpen,
+      toggleInspector,
       historyOpen,
       activeSlide,
       canvasBlocks,
@@ -586,7 +605,11 @@ export default {
       ><button class="primary" @click="save(true)">Сохранить</button>
     </div>
   </header>
-  <div v-if="mode === 'edit'" class="layout">
+  <div
+    v-if="mode === 'edit'"
+    class="layout"
+    :class="{ 'inspector-closed': !inspectorOpen }"
+  >
     <aside class="palette">
       <div class="sticky">
         <template v-for="(items, g) in groups" :key="g"
@@ -627,9 +650,20 @@ export default {
           <span
             >Модули: {{ course.blocks.length }} · Видимые:
             {{ visible.length }}</span
-          ><button class="ghost small" @click="select(null, true)">
-            ⚙ Настройки курса
-          </button>
+          >
+          <div class="canvas-tools">
+            <button class="ghost small" @click="select(null, true)">
+              Настройки курса
+            </button>
+            <button
+              class="small panel-toggle"
+              aria-controls="inspectorPane"
+              :aria-expanded="inspectorOpen"
+              @click="toggleInspector"
+            >
+              {{ inspectorOpen ? "Свернуть параметры" : "Параметры" }}
+            </button>
+          </div>
         </div>
         <SlideEditor
           v-if="activeSlide"
@@ -646,7 +680,7 @@ export default {
         </button>
       </div>
     </main>
-    <aside id="inspectorPane" class="inspector">
+    <aside v-show="inspectorOpen" id="inspectorPane" class="inspector">
       <div class="sticky">
         <ModuleSettings
           v-if="current"

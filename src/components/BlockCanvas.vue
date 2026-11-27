@@ -1,5 +1,5 @@
 <script setup>
-import { inject } from "vue";
+import { inject, ref, watch } from "vue";
 import { types } from "../model.js";
 import ModuleView from "./ModuleView.vue";
 import ModuleEditor from "./ModuleEditor.vue";
@@ -9,6 +9,7 @@ const {
   course,
   transferSlide,
   selected,
+  pick,
   editPath,
   drag,
   over,
@@ -22,6 +23,14 @@ const {
   dragOver,
   drop,
 } = inject("courseCanvas");
+const menuFor = ref(null);
+watch(selected, () => {
+  menuFor.value = null;
+});
+function runAction(id, command) {
+  menuFor.value = null;
+  action(id, command);
+}
 </script>
 <template>
   <div
@@ -34,8 +43,10 @@ const {
       :key="b.id"
       :id="'block-' + b.id"
       class="block"
+      @click.stop="pick(b.id)"
       :class="{
         selected: selected === b.id,
+        editing: editPath.includes(b.id) && selected === b.id,
         'hidden-block': b.hidden,
         'insert-before': over?.list === blocks && over.at === i,
         'insert-after':
@@ -44,81 +55,103 @@ const {
           i === over.at - 1,
       }"
     >
-      <div class="block-bar" @click="select(b.id, true)">
+      <div class="block-bar">
         <span
+          v-if="selected === b.id"
           class="handle"
           draggable="true"
+          title="Перетащить модуль"
           @dragstart="dragStart($event, 'move', b.id)"
           @dragend="dragEnd"
           >⠿</span
-        ><span class="name"
-          >{{ String(i + 1).padStart(2, "0") }} · {{ types[b.type][0]
-          }}{{ b.hidden ? " · скрыт" : "" }}</span
         >
-        <div class="actions">
+        <button
+          class="card-name"
+          type="button"
+          :aria-pressed="selected === b.id"
+          @click.stop="pick(b.id)"
+        >
+          <span class="card-index">{{ String(i + 1).padStart(2, "0") }}</span>
+          {{ types[b.type][0] }}{{ b.hidden ? " · скрыт" : "" }}
+        </button>
+        <div v-if="selected === b.id" class="actions card-actions">
           <button
-            class="small ghost edit-toggle"
+            class="small edit-toggle"
             :aria-expanded="editPath.includes(b.id)"
             @click.stop="
               editPath.includes(b.id) ? finishEdit(b.id) : select(b.id)
             "
           >
-            {{ editPath.includes(b.id) ? "Готово" : "Изменить" }}</button
-          ><button
-            class="icon ghost"
-            title="Выше"
-            :disabled="i === 0"
-            @click.stop="action(b.id, 'up')"
-          >
-            ↑</button
-          ><button
-            class="icon ghost"
-            title="Ниже"
-            :disabled="i === blocks.length - 1"
-            @click.stop="action(b.id, 'down')"
-          >
-            ↓</button
-          ><button
-            class="icon ghost"
-            title="Скрыть / показать"
-            @click.stop="action(b.id, 'hide')"
-          >
-            {{ b.hidden ? "◉" : "◌" }}</button
-          ><button
-            class="icon ghost"
-            title="Дублировать"
-            @click.stop="action(b.id, 'copy')"
-          >
-            ⧉</button
-          ><button
+            {{ editPath.includes(b.id) ? "Готово" : "Изменить" }}
+          </button>
+          <button
             class="small ghost danger"
             title="Удалить"
             @click.stop="action(b.id, 'delete')"
           >
             Удалить
           </button>
-        </div>
-        <select
-          v-if="activeSlide && course.slides.length > 1"
-          aria-label="Перенести модуль на слайд"
-          title="Перенести модуль на слайд"
-          value=""
-          @click.stop
-          @change.stop="
-            transferSlide($event.target.value, b.id);
-            $event.target.value = '';
-          "
-        >
-          <option value="" disabled>На слайд…</option>
-          <option
-            v-for="(s, n) in course.slides"
-            :key="s.id"
-            :value="s.id"
-            :disabled="s.id === activeSlide.id"
+          <div
+            class="card-more"
+            @focusout="
+              !$event.currentTarget.contains($event.relatedTarget) &&
+              (menuFor = null)
+            "
+            @keydown.esc.stop="
+              menuFor = null;
+              $event.currentTarget.querySelector('button').focus();
+            "
           >
-            {{ n + 1 }} · {{ s.title }}
-          </option>
-        </select>
+            <button
+              class="small ghost"
+              :aria-expanded="menuFor === b.id"
+              @click.stop="menuFor = menuFor === b.id ? null : b.id"
+            >
+              Ещё ▾
+            </button>
+            <div
+              v-if="menuFor === b.id"
+              class="card-menu"
+              aria-label="Действия с модулем"
+            >
+              <button :disabled="i === 0" @click.stop="runAction(b.id, 'up')">
+                Переместить выше
+              </button>
+              <button
+                :disabled="i === blocks.length - 1"
+                @click.stop="runAction(b.id, 'down')"
+              >
+                Переместить ниже
+              </button>
+              <button @click.stop="runAction(b.id, 'copy')">Дублировать</button>
+              <button @click.stop="runAction(b.id, 'hide')">
+                {{ b.hidden ? "Показать в уроке" : "Скрыть в уроке" }}
+              </button>
+              <label v-if="activeSlide && course.slides.length > 1"
+                >На другой слайд
+                <select
+                  aria-label="Перенести модуль на слайд"
+                  value=""
+                  @click.stop
+                  @change.stop="
+                    menuFor = null;
+                    transferSlide($event.target.value, b.id);
+                  "
+                >
+                  <option value="" disabled>Выберите слайд</option>
+                  <option
+                    v-for="(s, n) in course.slides"
+                    :key="s.id"
+                    :value="s.id"
+                    :disabled="s.id === activeSlide.id"
+                  >
+                    {{ n + 1 }} · {{ s.title }}
+                  </option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="block-content">
         <ModuleEditor
