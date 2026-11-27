@@ -7,3 +7,12 @@
 .block.insert-before::before{top:-7px}.block.insert-after::after{bottom:-7px}
 .empty.drop-active{outline:2px dashed #688000}
 .block-bar{flex-wrap:wrap}.block-bar .actions{flex-wrap:wrap}.block-content .field{max-width:100%}
+.writing-frame{border:1px solid var(--line);border-radius:10px;background:white;overflow:hidden}
+.writing-frame:focus-within{border-color:#718238;box-shadow:0 0 0 2px #eaf1d1}
+.writing-tools{display:flex;gap:4px;flex-wrap:wrap;align-items:center;background:#f7f8f5;padding:7px;border-bottom:1px solid var(--line)}
+.writing-tools button,.writing-tools select{min-height:32px;font-size:13px}
+.field .writing-tools select{width:auto;padding:4px 7px}
+.writing-tools button{padding:4px 8px}.writing-tools button[aria-pressed=true]{background:#e5efa9;border-color:#8a9c42}
+.format-bold{font-weight:800}.format-italic{font-style:italic}.format-underline{text-decoration:underline}
+.writing-area{min-height:7rem;padding:12px 14px;outline:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.writing-area li p{margin:0}.rich p:empty::before{content:"\00a0"}

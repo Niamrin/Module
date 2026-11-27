@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>globalThis.crypto?.randomUUID?.()||'m'+Date.now().toString(36)+Math.random().toString(36).slice(2);
 const types={text:['Текст','T','Текст и структура'],image:['Изображение','▧','Мультимедиа'],carousel:['Карусель','▣','Мультимедиа'],mapping:['Изображение с маппингом','⊙','Мультимедиа'],list:['Список','☷','Текст и структура'],tabs:['Табы','▥','Интерактив'],video:['Видео','▷','Мультимедиа'],spoiler:['Спойлер','⌄','Интерактив'],quiz:['Тест','☑','Проверка знаний']};
@@ -30,10 +31,22 @@ function normalize(raw){if(!raw||!Array.isArray(raw.blocks))throw Error('Нев�
  });
 }return v;})};}
 function inline(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/__(.+?)__/g,'<u>$1</u>').replace(/==(.+?)==/g,'<mark>$1</mark>').replace(/\*(.+?)\*/g,'<em>$1</em>');}
-function rich(s){return '<div class="rich">'+str(s).split(/\r?\n/).filter(x=>x.trim()).map(line=>{let h=line.match(/^(#{1,4})\s+(.+)$/);return h?`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`:`<p>${inline(line)}</p>`}).join('')+'</div>';}
+const richPrefix = 'course-rich:v1:';
+function encodeRich(html) {
+  return richPrefix + html;
+}
+function rich(s) {
+  if (typeof s === 'string' && s.startsWith(richPrefix)) {
+    const html = DOMPurify.sanitize(s.slice(richPrefix.length), {
+      ALLOWED_TAGS: ['p','br','h1','h2','h3','h4','strong','em','u','mark','ul','ol','li'],
+      ALLOWED_ATTR: ['start'], ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false,
+    });
+    return '<div class="rich">' + html + '</div>';
+  }
+  return '<div class="rich">'+str(s).split(/\r?\n/).filter(x=>x.trim()).map(line=>{let h=line.match(/^(#{1,4})\s+(.+)$/);return h?`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`:`<p>${inline(line)}</p>`}).join('')+'</div>';}
 function safeMedia(src,kind='image'){if(typeof src!=='string'||!src.trim())return '';const s=src.trim();if(kind==='image'&&/^data:image\/(png|jpeg|jpg|gif|webp|avif|svg\+xml|bmp)(?:;[^,]*)?,/i.test(s))return s;if(kind==='video'&&/^data:video\/(mp4|webm|ogg)(?:;[^,]*)?,/i.test(s))return s;try{const u=new URL(s);return ['https:','http:'].includes(u.protocol)?u.href:''}catch{return ''}}
 function embed(src){try{let u=new URL(src),host=u.hostname.replace(/^www\./,'');let id;if(host==='youtu.be')id=u.pathname.split('/')[1];if(['youtube.com','m.youtube.com','youtube-nocookie.com'].includes(host))id=u.searchParams.get('v')||u.pathname.match(/\/(?:embed|shorts)\/([^/]+)/)?.[1];if(id&&/^[A-Za-z0-9_-]{11}$/.test(id))return 'https://www.youtube-nocookie.com/embed/'+id;if(['vimeo.com','player.vimeo.com'].includes(host)&&(id=u.pathname.match(/\/(?:video\/)?(\d+)/)?.[1]))return 'https://player.vimeo.com/video/'+id;if(host==='rutube.ru'&&(id=u.pathname.match(/\/(?:video|play\/embed)\/([a-f0-9]{32})/i)?.[1]))return 'https://rutube.ru/play/embed/'+id;}catch{}return '';}
 function questionErrors(b){let d=b.data,n=d.options.filter(o=>o.correct).length;return [!d.question.trim()?'Введите вопрос.':'',d.options.length<2||d.options.some(o=>!o.text.trim())?'Нужно минимум два заполненных варианта.':'',b.type==='single'&&n!==1?'Выберите ровно один правильный ответ.':'',b.type==='multiple'&&n<2?'Выберите не менее двух правильных ответов.':'',b.type==='multiple'&&n===d.options.length?'Добавьте хотя бы один неправильный вариант.':''].filter(Boolean)}
 function correct(b,s){let keys=b.data.options.filter(o=>o.correct).map(o=>o.id);return !questionErrors(b).length&&keys.length===s.answers.length&&keys.every(x=>s.answers.includes(x));}
 function exportFile(content,name,type){let blob=new Blob([content],{type}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
-export {uid,types,make,demo,isQuestion,normalize,inline,rich,safeMedia,embed,questionErrors,correct,exportFile};
+export {uid,types,make,demo,isQuestion,normalize,inline,rich,encodeRich,safeMedia,embed,questionErrors,correct,exportFile};
